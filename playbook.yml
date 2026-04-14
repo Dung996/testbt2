@@ -3,7 +3,6 @@
   become: yes
 
   tasks:
-
     - name: Update apt
       apt:
         update_cache: yes
@@ -16,15 +15,46 @@
           - git
         state: present
 
-    - name: Install Docker
-      shell: |
-        curl -fsSL https://get.docker.com | sh
+    - name: Install OpenSSH Server (Ubuntu)
+      apt:
+        name: openssh-server
+        state: present
+        update_cache: yes
 
-    - name: Start Docker
+    - name: Ensure SSH service is running
       systemd:
-        name: docker
+        name: ssh
         state: started
         enabled: yes
+
+    - name: Change hostname
+      hostname:
+        name: dungserver
+
+    - name: Restart SSH
+      systemd:
+        name: ssh
+        state: restarted
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu noble stable
+        state: present
+
+    - name: Install Docker Engine
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
 
     - name: Add user to docker group
       user:
@@ -32,23 +62,27 @@
         groups: docker
         append: yes
 
+    - name: Reset SSH connection to apply group
+      meta: reset_connection
+
     - name: Clone source code
       git:
         repo: https://github.com/hieuabcd/webbt2.git
         dest: /home/ubuntu/app
-    
-    - name: Install docker compose plugin
-      apt:
-        name: docker-compose-plugin
-        state: present
-    
-    - name: Stop old containers
+
+    - name: Ensure Docker service is running
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Stop containers
       shell: docker compose down
       args:
         chdir: /home/ubuntu/app
       ignore_errors: yes
 
-    - name: Run docker compose
-      shell: docker compose up -d
+    - name: Start containers
+      shell: docker compose up -d --build
       args:
         chdir: /home/ubuntu/app
